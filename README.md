@@ -27,6 +27,6 @@ Below is the screen recording demonstrating the Level 1 flow (Calendar -> Site V
 Below are the key screens from the Level 2 implementation.
 | | | |
 | :---: | :---: | :---: |
-| ![Screen 11](Screenshots/11.jpeg) |![Screen 12](Screenshots/12.jpeg) |
-|![Screen 13](Screenshots/13.jpeg)|![Screen 14](Screenshots/14.jpeg)|
+| ![Screen 11](Screenshots/11.jpeg) |![Screen 12](Screenshots/12.jpeg) |![Screen 13](Screenshots/13.jpeg)|
+|![Screen 14](Screenshots/14.jpeg)|
 
