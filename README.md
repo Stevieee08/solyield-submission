@@ -31,6 +31,6 @@ Below are the key screens from the Level 2 implementation.
 |![Screen 14](Screenshots/14.jpeg)|
 
 ##5.Video Walkthrough
-Below is the screen recording demonstrating the Level 1 flow (Offline DB -> Sync on Reconnect -> Visual Evidence).
+Below is the screen recording demonstrating the Level 2 flow (Offline DB -> Sync on Reconnect -> Visual Evidence).
 
 [![Watch Level 2 Demo](https://img.shields.io/badge/▶_Watch_Demo-Video-red?style=for-the-badge&logo=google-drive)](https://drive.google.com/file/d/1JVBHzhAZCXdNpe-NMZHdl8KzEnHOpEMx/view?usp=drivesdk)
