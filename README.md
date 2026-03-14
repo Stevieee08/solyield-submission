@@ -23,10 +23,14 @@ Below is the screen recording demonstrating the Level 1 flow (Calendar -> Site V
 
 [![Watch Level 1 Demo](https://img.shields.io/badge/▶_Watch_Demo-Video-red?style=for-the-badge&logo=google-drive)](https://drive.google.com/file/d/1XKUy5miBC9R05nUhTDg5XrNGm7YHqil9/view?usp=drive_link)
 
-## 2. Screenshots
+## 4. Screenshots
 Below are the key screens from the Level 2 implementation.
 | | | |
 | :---: | :---: | :---: |
 | ![Screen 11](Screenshots/11.jpeg) |![Screen 12](Screenshots/12.jpeg) |![Screen 13](Screenshots/13.jpeg)|
 |![Screen 14](Screenshots/14.jpeg)|
 
+##5.Video Walkthrough
+Below is the screen recording demonstrating the Level 1 flow (Offline DB -> Sync on Reconnect -> Visual Evidence).
+
+[![Watch Level 2 Demo](https://img.shields.io/badge/▶_Watch_Demo-Video-red?style=for-the-badge&logo=google-drive)](https://drive.google.com/file/d/1JVBHzhAZCXdNpe-NMZHdl8KzEnHOpEMx/view?usp=drivesdk)
