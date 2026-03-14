@@ -1,21 +1,75 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, RefreshControl, StyleSheet, Alert, Platform, Linking } from 'react-native';
 import { useRouter } from 'expo-router';
 import { format } from 'date-fns';
 import { Ionicons } from '@expo/vector-icons';
+import { Q } from '@nozbe/watermelondb';
+import FormSubmission from '../../db/models/FormSubmission';
+import { database } from '../../db';
 import { LinearGradient } from 'expo-linear-gradient';
 import * as Calendar from 'expo-calendar';
+import NetInfo from '@react-native-community/netinfo';
 
 import { schedule } from '../../constants/schedule';
 import { sites } from '../../constants/sites';
 import { useTheme } from '../../context/ThemeContext';
 import Header from '../../components/Header';
+import { triggerBackgroundSync } from '../../services/syncEngine';
 
 export default function AgendaScreen() {
   const router = useRouter();
   const [refreshing, setRefreshing] = useState(false);
   const { colors, theme } = useTheme();
 
+// --- AUTOMATIC NETWORK RESTORATION DETECTOR ---
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener(state => {
+      if (state.isConnected && state.isInternetReachable) {
+        console.log("🌐 Network Restored! Waiting for Metro to reconnect...");
+        
+        // Give VS Code 3 seconds to re-attach before running the sync
+        setTimeout(() => {
+            handleBackgroundSync();
+        }, 3000);
+      }
+    });
+
+    handleBackgroundSync();
+    return () => unsubscribe();
+  }, []);
+
+  const handleBackgroundSync = async () => {
+    const result = await triggerBackgroundSync();
+    
+    // Notify Arjun when his offline work actually hits the cloud
+    if (result.status === 'synced' && result.count && result.count > 0) {
+      Alert.alert("☁️ Cloud Sync Complete", `${result.count} offline forms were uploaded to the server.`);
+    }
+  };
+// --- SECRET DEVELOPER FUNCTION TO VIEW DB ---
+  const dumpDatabaseToTerminal = async () => {
+    try {
+      // Fetch ALL forms (both synced and unsynced)
+      const allForms = await database.get<FormSubmission>('form_submissions').query().fetch();
+      
+      console.log("\n========================================");
+      console.log(`📦 DATABASE DUMP: Found ${allForms.length} Total Forms`);
+      console.log("========================================");
+      
+      allForms.forEach((form, index) => {
+        console.log(`\n📄 FORM ${index + 1}:`);
+        console.log(`- Visit ID: ${form.visitId}`);
+        console.log(`- Form ID: ${form.formId}`);
+        console.log(`- Synced to Cloud?: ${form.isSynced ? '✅ YES' : '❌ NO'}`);
+        console.log(`- Answers:`, JSON.stringify(form.answers, null, 2)); // Pretty-prints the JSON
+      });
+      console.log("\n========================================\n");
+      
+      Alert.alert("Database Dumped!", "Check your VS Code Terminal to see all saved data.");
+    } catch (error) {
+      console.error("Failed to dump DB:", error);
+    }
+  };
   // Combine schedule and site data
   const data = schedule.map(visit => {
     const site = sites.find(s => s.id === visit.siteId);
@@ -126,7 +180,13 @@ export default function AgendaScreen() {
     <LinearGradient colors={[colors.gradientStart, colors.gradientEnd]} style={styles.container}>
       <Header />
       <View style={styles.content}>
-        <Text style={[styles.sectionTitle, { color: colors.text }]}>My Visits</Text>
+        
+        {/* --- NEW: Secret Developer Button --- */}
+        <TouchableOpacity onPress={dumpDatabaseToTerminal} activeOpacity={0.7}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>My Visits</Text>
+        </TouchableOpacity>
+        {/* ------------------------------------ */}
+
         <Text style={[styles.subtitle, { color: colors.subText }]}>You have {data.length} tasks scheduled</Text>
         
         <FlatList 

@@ -1,23 +1,32 @@
 import React, { useState } from 'react';
 import { View, Text, TextInput, ScrollView, TouchableOpacity, Alert, StyleSheet, Image, FlatList } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import * as ImageManipulator from 'expo-image-manipulator';
+import { triggerBackgroundSync } from '../../services/syncEngine';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
+import NetInfo from '@react-native-community/netinfo';
+
+// Import Database Service
+import { saveFormOffline } from '../../services/formService';
 import { formSchema } from '../../constants/form_schema';
-import { useTheme } from '../../context/ThemeContext'; // Import Theme Hook
+import { useTheme } from '../../context/ThemeContext';
 
 export default function DynamicFormScreen() {
+  const { id: visitId } = useLocalSearchParams();
   const router = useRouter();
-  const { colors, theme } = useTheme(); // Get Current Theme Colors
+  const { colors, theme } = useTheme();
+  
   const [formData, setFormData] = useState<Record<string, any>>({});
+  const [isSaving, setIsSaving] = useState(false);
 
   // --- 1. HANDLE TEXT/CHOICE INPUT ---
   const handleInputChange = (fieldId: string, value: any) => {
     setFormData(prev => ({ ...prev, [fieldId]: value }));
   };
 
-  // --- 2. HANDLE IMAGE UPLOAD (Multi-Select) ---
+  // --- 2. HANDLE IMAGE UPLOAD (With Compression) ---
   const handleImagePick = async (fieldId: string, type: 'Capture' | 'Upload') => {
     // Check Permissions
     if (type === 'Capture') {
@@ -32,20 +41,40 @@ export default function DynamicFormScreen() {
     if (type === 'Capture') {
         result = await ImagePicker.launchCameraAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
-            quality: 0.5,
+            quality: 1, // We let the camera take the best photo, then compress it ourselves
         });
     } else {
         result = await ImagePicker.launchImageLibraryAsync({
             mediaTypes: ImagePicker.MediaTypeOptions.Images,
             allowsMultipleSelection: true, 
-            quality: 0.5,
+            quality: 1,
         });
     }
 
     if (!result.canceled) {
         const currentImages = formData[fieldId] || [];
-        const newImages = result.assets.map(asset => asset.uri);
-        handleInputChange(fieldId, [...currentImages, ...newImages]);
+        const compressedImages: string[] = [];
+
+        // Loop through all selected/captured images and compress them
+        for (const asset of result.assets) {
+            try {
+                // Resize width to 800px (keeps aspect ratio) and compress quality to 70%
+                const manipResult = await ImageManipulator.manipulateAsync(
+                    asset.uri,
+                    [{ resize: { width: 800 } }], 
+                    { compress: 0.7, format: ImageManipulator.SaveFormat.JPEG }
+                );
+                
+                // Add the new compressed local URI to our array
+                compressedImages.push(manipResult.uri);
+                console.log(`Image compressed from ${asset.width}px to 800px width.`);
+            } catch (error) {
+                console.error("Failed to compress image:", error);
+                compressedImages.push(asset.uri); // Fallback to original if compression fails
+            }
+        }
+
+        handleInputChange(fieldId, [...currentImages, ...compressedImages]);
     }
   };
 
@@ -55,11 +84,56 @@ export default function DynamicFormScreen() {
     handleInputChange(fieldId, updatedImages);
   };
 
-  // --- 3. SUBMIT LOGIC ---
-  const handleSubmit = () => {
-    Alert.alert("Success", "Maintenance Data Saved Locally", [
-        { text: "OK", onPress: () => router.back() }
-    ]);
+  // --- 3. SUBMIT LOGIC (WatermelonDB Integration) ---
+  const handleSubmit = async () => {
+   const allFields = formSchema.sections.flatMap((s: any) => s.fields as any[]);
+
+const missingFields = allFields.filter((field: any) => {
+    return field.required && !formData[field.id];
+});
+
+    if (missingFields.length > 0) {
+    return Alert.alert("Required Fields", "Please fill out all required fields.");
+    }
+
+    setIsSaving(true);
+    try {
+      // 1. Save to local WatermelonDB
+      await saveFormOffline(visitId as string, formSchema.id, formData);
+      
+      // 2. CHECK REAL HARDWARE NETWORK STATUS
+      const networkState = await NetInfo.fetch();
+      
+      if (networkState.isConnected && networkState.isInternetReachable) {
+        // If we really have internet, run the sync engine!
+        const syncResult = await triggerBackgroundSync(); 
+
+        if (syncResult && syncResult.status === 'synced' && (syncResult.count ?? 0) > 0) {
+          Alert.alert(
+            "☁️ Saved to Cloud", 
+            "Your report was successfully uploaded to the server!", 
+            [{ text: "OK", onPress: () => router.back() }]
+          );
+        } else {
+          // Fallback just in case the sync failed
+          Alert.alert("📱 Saved Offline", "Data saved locally.", [{ text: "OK", onPress: () => router.back() }]);
+        }
+      } else {
+        // WE ARE OFFLINE! Do not run the sync engine. Show the offline message immediately.
+        console.log("🚫 Hardware offline. Skipping sync engine.");
+        Alert.alert(
+          "📱 Saved Offline", 
+          "You are offline. The report is saved safely on your device and will sync automatically later.", 
+          [{ text: "OK", onPress: () => router.back() }]
+        );
+      }
+
+    } catch (error) {
+      console.error(error);
+      Alert.alert("Error", "Failed to save data.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   // --- 4. RENDERERS ---
@@ -220,19 +294,23 @@ export default function DynamicFormScreen() {
                     <Text style={[styles.sectionTitle, { color: colors.primary }]}>{section.title}</Text>
                 </View>
                 
-                {section.fields.map((field) => (
-                    <View key={field.id} style={styles.fieldContainer}>
-                        <Text style={[styles.label, { color: colors.text }]}>
-                            {field.label} {field.required && <Text style={{color: colors.error}}>*</Text>}
-                        </Text>
-                        {renderField(field)}
-                    </View>
-                ))}
+                {section.fields.map((field: any) => (
+            <View key={field.id} style={styles.fieldContainer}>
+                <Text style={[styles.label, { color: colors.text }]}>
+                    {field.label} {field.required && <Text style={{color: colors.error}}>*</Text>}
+                </Text>
+                {renderField(field)}
+            </View>
+        ))}
             </View>
         ))}
 
-        <TouchableOpacity style={[styles.submitButton, { backgroundColor: colors.success }]} onPress={handleSubmit}>
-            <Text style={styles.submitButtonText}>Submit Report</Text>
+        <TouchableOpacity 
+          style={[styles.submitButton, { backgroundColor: colors.success }]} 
+          onPress={handleSubmit}
+          disabled={isSaving}
+        >
+            <Text style={styles.submitButtonText}>{isSaving ? "Saving..." : "Submit Report"}</Text>
         </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>

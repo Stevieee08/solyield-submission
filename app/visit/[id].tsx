@@ -1,7 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, ActivityIndicator, Alert, StyleSheet, Dimensions } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { BarChart, PieChart } from 'react-native-gifted-charts';
+import ViewShot from 'react-native-view-shot';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as Location from 'expo-location';
@@ -56,7 +57,11 @@ export default function VisitDetailScreen() {
   const { colors, theme } = useTheme(); 
   const [loading, setLoading] = useState(false);
   const [checkedIn, setCheckedIn] = useState(false);
-
+  
+  // Chart Refs for Screenshotting
+  const barChartRef = useRef<any>(null);
+  const pieChartRef = useRef<any>(null);
+  
   const technician = { id: "tech_01", name: "Arjun" };
   const visit = schedule.find(v => v.id === id);
   const site = sites.find(s => s.id === visit?.siteId);
@@ -64,14 +69,15 @@ export default function VisitDetailScreen() {
   if (!visit || !site) return <View style={[styles.center, {backgroundColor: colors.background}]}><Text style={{color: colors.text}}>Visit Not Found</Text></View>;
 
   const barData = processChartData(colors.text);
-  const zeroEnergyVal = performanceData?.['zeroEnergy Days'] || performanceData?.zeroEnergyDays || 0;
+  const perfData = performanceData as any;
+  const zeroEnergyVal = perfData?.['zeroEnergy Days'] || perfData?.zeroEnergyDays || 0;
   
   const pieData = [
-    { value: performanceData?.overPerformingDays || 0, color: '#4ADE80', text: String(performanceData?.overPerformingDays || 0), label: 'Over Performing' },
-    { value: performanceData?.normalDays || 0, color: '#60A5FA', text: String(performanceData?.normalDays || 0), label: 'Normal' },
-    { value: performanceData?.underPerformingDays || 0, color: '#FBBF24', text: String(performanceData?.underPerformingDays || 0), label: 'Under Performing' },
+    { value: perfData?.overPerformingDays || 0, color: '#4ADE80', text: String(perfData?.overPerformingDays || 0), label: 'Over Performing' },
+    { value: perfData?.normalDays || 0, color: '#60A5FA', text: String(perfData?.normalDays || 0), label: 'Normal' },
+    { value: perfData?.underPerformingDays || 0, color: '#FBBF24', text: String(perfData?.underPerformingDays || 0), label: 'Under Performing' },
     { value: zeroEnergyVal, color: '#F87171', text: String(zeroEnergyVal), label: 'Zero Energy' },
-    { value: performanceData?.daysNoData || 0, color: '#9CA3AF', text: String(performanceData?.daysNoData || 0), label: 'No Data' },
+    { value: perfData?.daysNoData || 0, color: '#9CA3AF', text: String(perfData?.daysNoData || 0), label: 'No Data' },
   ].filter(item => item.value > 0);
 
   const handleCheckIn = async () => {
@@ -95,100 +101,88 @@ export default function VisitDetailScreen() {
   };
 
   const generatePDF = async () => {
-    const barLabels = barData.map(d => d.label);
-    const barValues = barData.map(d => d.value);
-    const pieLabels = pieData.map(d => d.label);
-    const pieValues = pieData.map(d => d.value);
-    const pieColors = pieData.map(d => d.color);
-
-    const barChartConfig = {
-      type: 'bar',
-      data: { labels: barLabels, datasets: [{ label: 'Energy Generated (kWh)', data: barValues, backgroundColor: '#3B82F6', borderRadius: 4 }] },
-      options: { responsive: false, plugins: { legend: { display: false } } }
-    };
-
-    const pieChartConfig = {
-      type: 'doughnut',
-      data: { labels: pieLabels, datasets: [{ data: pieValues, backgroundColor: pieColors, borderWidth: 2, borderColor: '#ffffff' }] },
-      options: { responsive: false }
-    };
-
-    const barChartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(barChartConfig))}&w=600&h=300`;
-    const pieChartUrl = `https://quickchart.io/chart?c=${encodeURIComponent(JSON.stringify(pieChartConfig))}&w=400&h=400`;
-
-    const html = `
-      <!DOCTYPE html>
-      <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
-        <style>
-          body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #111827; background-color: white; }
-          .header { text-align: center; border-bottom: 3px solid #2563EB; padding-bottom: 20px; margin-bottom: 30px; }
-          .title { color: #1E3A8A; margin: 0; font-size: 28px; }
-          .subtitle { color: #6B7280; font-size: 14px; margin-top: 5px; }
-          .section { margin-bottom: 40px; }
-          .section h2 { border-bottom: 1px solid #E5E7EB; padding-bottom: 8px; color: #374151; font-size: 20px; }
-          .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-          .card { background: #F9FAFB; padding: 15px; border-radius: 8px; border: 1px solid #E5E7EB; }
-          .card strong { color: #374151; display: block; font-size: 12px; text-transform: uppercase; margin-bottom: 4px; }
-          .card span { font-size: 16px; color: #111827; }
-          .chart-container { width: 100%; margin: 20px auto; text-align: center; }
-          .chart-container img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #E5E7EB; padding: 10px; }
-          .badge-success { color: #047857; background: #D1FAE5; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-          .badge-error { color: #B91C1C; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
-        </style>
-      </head>
-      <body>
-        <div class="header">
-          <h1 class="title">Inspection & Performance Report</h1>
-          <p class="subtitle">Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
-        </div>
-
-        <div class="section">
-          <h2>1. Personnel & Site Details</h2>
-          <div class="grid">
-            <div class="card"><strong>Technician Name</strong><span>${technician.name}</span></div>
-            <div class="card"><strong>Technician ID</strong><span>${technician.id}</span></div>
-            <div class="card"><strong>Site Name</strong><span>${site.name}</span></div>
-            <div class="card"><strong>Site Capacity</strong><span>${site.capacity}</span></div>
-            <div class="card"><strong>Assigned Task</strong><span>${visit.title}</span></div>
-            <div class="card"><strong>Geographic Coordinates</strong><span>Lat: ${site.location.lat}, Lng: ${site.location.lng}</span></div>
-            <div class="card" style="grid-column: span 2;">
-                <strong>Geofence Verification Status</strong>
-                <span class="${checkedIn ? 'badge-success' : 'badge-error'}">
-                    ${checkedIn ? '✅ Verified On-Site via GPS' : '❌ Not Verified (Check-in Required)'}
-                </span>
-            </div>
-          </div>
-        </div>
-
-        <div class="section">
-          <h2>2. Daily Generation Data (kWh)</h2>
-          <div class="chart-container">
-            <img src="${barChartUrl}" alt="Daily Generation Bar Chart" />
-          </div>
-        </div>
-
-        <div class="section">
-          <h2>3. Performance Breakdown (Days)</h2>
-          <div class="chart-container">
-            <img src="${pieChartUrl}" alt="Performance Pie Chart" style="max-width: 400px;" />
-          </div>
-          <div class="grid" style="margin-top: 20px;">
-             <div class="card"><strong>Over Performing</strong><span>${performanceData?.overPerformingDays || 0}</span></div>
-             <div class="card"><strong>Normal</strong><span>${performanceData?.normalDays || 0}</span></div>
-             <div class="card"><strong>Under Performing</strong><span>${performanceData?.underPerformingDays || 0}</span></div>
-             <div class="card"><strong>Zero Energy</strong><span>${zeroEnergyVal}</span></div>
-             <div class="card"><strong>No Data</strong><span>${performanceData?.daysNoData || 0}</span></div>
-          </div>
-        </div>
-      </body>
-      </html>
-    `;
-
     try {
+        // 1. Capture the charts as base64 images directly from the screen!
+        const barBase64 = await barChartRef.current?.capture();
+        const pieBase64 = await pieChartRef.current?.capture();
+
+        // 2. Format them for HTML image tags
+        const barChartImg = barBase64 ? `data:image/jpeg;base64,${barBase64}` : '';
+        const pieChartImg = pieBase64 ? `data:image/jpeg;base64,${pieBase64}` : '';
+
+        const html = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0, user-scalable=no" />
+            <style>
+              body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; padding: 40px; color: #111827; background-color: white; }
+              .header { text-align: center; border-bottom: 3px solid #2563EB; padding-bottom: 20px; margin-bottom: 30px; }
+              .title { color: #1E3A8A; margin: 0; font-size: 28px; }
+              .subtitle { color: #6B7280; font-size: 14px; margin-top: 5px; }
+              .section { margin-bottom: 40px; }
+              .section h2 { border-bottom: 1px solid #E5E7EB; padding-bottom: 8px; color: #374151; font-size: 20px; }
+              .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+              .card { background: #F9FAFB; padding: 15px; border-radius: 8px; border: 1px solid #E5E7EB; }
+              .card strong { color: #374151; display: block; font-size: 12px; text-transform: uppercase; margin-bottom: 4px; }
+              .card span { font-size: 16px; color: #111827; }
+              .chart-container { width: 100%; margin: 20px auto; text-align: center; }
+              .chart-container img { max-width: 100%; height: auto; border-radius: 8px; border: 1px solid #E5E7EB; padding: 10px; }
+              .badge-success { color: #047857; background: #D1FAE5; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+              .badge-error { color: #B91C1C; background: #FEE2E2; padding: 4px 8px; border-radius: 4px; font-weight: bold; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1 class="title">Inspection & Performance Report</h1>
+              <p class="subtitle">Generated on ${new Date().toLocaleDateString()} at ${new Date().toLocaleTimeString()}</p>
+            </div>
+
+            <div class="section">
+              <h2>1. Personnel & Site Details</h2>
+              <div class="grid">
+                <div class="card"><strong>Technician Name</strong><span>${technician.name}</span></div>
+                <div class="card"><strong>Technician ID</strong><span>${technician.id}</span></div>
+                <div class="card"><strong>Site Name</strong><span>${site.name}</span></div>
+                <div class="card"><strong>Site Capacity</strong><span>${site.capacity}</span></div>
+                <div class="card"><strong>Assigned Task</strong><span>${visit.title}</span></div>
+                <div class="card"><strong>Geographic Coordinates</strong><span>Lat: ${site.location.lat}, Lng: ${site.location.lng}</span></div>
+                <div class="card" style="grid-column: span 2;">
+                    <strong>Geofence Verification Status</strong>
+                    <span class="${checkedIn ? 'badge-success' : 'badge-error'}">
+                        ${checkedIn ? '✅ Verified On-Site via GPS' : '❌ Not Verified (Check-in Required)'}
+                    </span>
+                </div>
+              </div>
+            </div>
+
+            <div class="section">
+              <h2>2. Daily Generation Data (kWh)</h2>
+              <div class="chart-container">
+                <img src="${barChartImg}" alt="Daily Generation Bar Chart" />
+              </div>
+            </div>
+
+            <div class="section">
+              <h2>3. Performance Breakdown (Days)</h2>
+              <div class="chart-container">
+                <img src="${pieChartImg}" alt="Performance Pie Chart" style="max-width: 400px;" />
+              </div>
+              <div class="grid" style="margin-top: 20px;">
+                 <div class="card"><strong>Over Performing</strong><span>${perfData?.overPerformingDays || 0}</span></div>
+                 <div class="card"><strong>Normal</strong><span>${perfData?.normalDays || 0}</span></div>
+                 <div class="card"><strong>Under Performing</strong><span>${perfData?.underPerformingDays || 0}</span></div>
+                 <div class="card"><strong>Zero Energy</strong><span>${zeroEnergyVal}</span></div>
+                 <div class="card"><strong>No Data</strong><span>${perfData?.daysNoData || 0}</span></div>
+              </div>
+            </div>
+          </body>
+          </html>
+        `;
+
         const { uri } = await Print.printToFileAsync({ html });
         await Sharing.shareAsync(uri);
+
     } catch (error) {
         Alert.alert("Error", "Could not generate PDF");
         console.error(error);
@@ -225,19 +219,25 @@ export default function VisitDetailScreen() {
             <Text style={[styles.cardTitle, { color: colors.text }]}>Daily Generation (kWh)</Text>
             <View style={{ marginTop: 16 }}>
                 <ScrollView horizontal showsHorizontalScrollIndicator={true} bounces={false}>
-                  <BarChart
-                      data={barData} barWidth={32} spacing={24} roundedTop hideRules xAxisThickness={1} xAxisColor={colors.subText}
-                      yAxisThickness={0} yAxisTextStyle={{color: colors.subText}} noOfSections={4} maxValue={60} height={200}
-                      width={chartContainerWidth} xAxisLabelTextStyle={{color: colors.subText, fontSize: 11}}
-                  />
+                  {/* WRAP THE BARCHART */}
+                  <ViewShot ref={barChartRef} options={{ format: 'jpg', quality: 0.8, result: 'base64' }}>
+                    <BarChart
+                        data={barData} barWidth={32} spacing={24} roundedTop hideRules xAxisThickness={1} xAxisColor={colors.subText}
+                        yAxisThickness={0} yAxisTextStyle={{color: colors.subText}} noOfSections={4} maxValue={60} height={200}
+                        width={chartContainerWidth} xAxisLabelTextStyle={{color: colors.subText, fontSize: 11}}
+                    />
+                  </ViewShot>
                 </ScrollView>
             </View>
         </View>
 
         <View style={[styles.card, { backgroundColor: colors.card }]}>
-            <Text style={[styles.cardTitle, { color: colors.text }]}>Performance Breakdown(Days)</Text>
+            <Text style={[styles.cardTitle, { color: colors.text }]}>Performance Breakdown (Days)</Text>
             <View style={{alignItems: 'center', marginVertical: 10}}>
-                <PieChart data={pieData} radius={100} showText textSize={14} fontWeight="bold" strokeWidth={2} strokeColor={colors.card} />
+                {/* WRAP THE PIECHART */}
+                <ViewShot ref={pieChartRef} options={{ format: 'jpg', quality: 0.8, result: 'base64' }}>
+                  <PieChart data={pieData} radius={100} showText textSize={14} fontWeight="bold" strokeWidth={2} strokeColor={colors.card} />
+                </ViewShot>
                 <View style={styles.legendContainer}>
                     {pieData.map((p, i) => (
                         <View key={i} style={styles.legendRow}>

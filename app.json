@@ -22,13 +22,27 @@
         "backgroundColor": "#ffffff"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.anonymous.solyieldapp",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyBFm0ZAYiuvHh6RWQCi6cjhT594ayhi4Xs"
+        }
+      }
     },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-font"
+      "expo-font",
+      "expo-router",
+      [
+        "@morrowdigital/watermelondb-expo-plugin",
+        {
+          "disableJsi": true
+        }
+      ],
+      "expo-sqlite"
     ]
   }
 }
